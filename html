@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Intake Tracker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .records-title {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 22px;
+        }
+
+        .records-list {
+            list-style: none;
+        }
+
+        .record-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid #667eea;
+        }
+
+        .record-count {
+            font-size: 24px;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .record-date {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+
+        .empty-state svg {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>💧 Water Intake Tracker</h1>
+            <p class="subtitle">Track your daily water consumption</p>
+
+            <div id="message"></div>
+
+            <form id="waterForm">
+                <div class="form-group">
+                    <label for="count">Number of glasses</label>
+                    <input 
+                        type="number" 
+                        id="count" 
+                        name="count" 
+                        min="1" 
+                        required 
+                        placeholder="Enter number of glasses"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="date">Date</label>
+                    <input 
+                        type="date" 
+                        id="date" 
+                        name="date" 
+                        required
+                    >
+                </div>
+
+                <button type="submit" id="submitBtn">Add Water Intake</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2 class="records-title">📊 Your Records</h2>
+            <div id="recordsContainer">
+                <div class="loading">Loading records...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api/water';
+        const form = document.getElementById('waterForm');
+        const recordsContainer = document.getElementById('recordsContainer');
+        const messageDiv = document.getElementById('message');
+        const submitBtn = document.getElementById('submitBtn');
+        const dateInput = document.getElementById('date');
+
+        // Set today's date as default
+        dateInput.valueAsDate = new Date();
+
+        // Show message
+        function showMessage(text, type) {
+            messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+            setTimeout(() => {
+                messageDiv.innerHTML = '';
+            }, 3000);
+        }
+
+        // Load records
+        async function loadRecords() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+
+                if (data.success && data.records.length > 0) {
+                    displayRecords(data.records);
+                } else {
+                    recordsContainer.innerHTML = `
+                        <div class="empty-state">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <p>No records yet. Start tracking your water intake!</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                recordsContainer.innerHTML = `
+                    <div class="empty-state">
+                        <p>Error loading records. Please try again.</p>
+                    </div>
+                `;
+                console.error('Error loading records:', error);
+            }
+        }
+
+        // Display records
+        function displayRecords(records) {
+            const sortedRecords = records.sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            recordsContainer.innerHTML = `
+                <ul class="records-list">
+                    ${sortedRecords.map(record => `
+                        <li class="record-item">
+                            <div>
+                                <div class="record-count">${record.count} glasses</div>
+                                <div class="record-date">${formatDate(record.date)}</div>
+                            </div>
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+
+        // Format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+        }
+
+        // Handle form submit
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const count = parseInt(document.getElementById('count').value);
+            const date = document.getElementById('date').value;
+
+            // Disable button during submission
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Adding...';
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ count, date })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('Water intake recorded successfully!', 'success');
+                    form.reset();
+                    dateInput.valueAsDate = new Date();
+                    await loadRecords();
+                } else {
+                    showMessage(data.error || 'Failed to add record', 'error');
+                }
+            } catch (error) {
+                showMessage('Error adding record. Please try again.', 'error');
+                console.error('Error:', error);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Water Intake';
+            }
+        });
+
+        // Load records on page load
+        loadRecords();
+    </script>
+</body>
+</html>
