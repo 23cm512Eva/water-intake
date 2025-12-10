@@ -365,6 +365,26 @@
             }, 3000);
         }
 
+        // Group records by date and sum counts
+        function groupRecordsByDate(records) {
+            const grouped = {};
+            
+            records.forEach(record => {
+                const date = record.date;
+                if (!grouped[date]) {
+                    grouped[date] = {
+                        date: date,
+                        count: 0,
+                        records: []
+                    };
+                }
+                grouped[date].count += record.count;
+                grouped[date].records.push(record);
+            });
+
+            return Object.values(grouped);
+        }
+
         // Filter records based on selected period
         function filterRecords(records, filter) {
             const today = new Date();
@@ -398,10 +418,11 @@
 
         // Calculate statistics
         function calculateStats(records) {
-            const total = records.reduce((sum, record) => sum + record.count, 0);
-            const avg = records.length > 0 ? (total / records.length).toFixed(1) : 0;
+            const groupedByDate = groupRecordsByDate(records);
+            const total = groupedByDate.reduce((sum, day) => sum + day.count, 0);
+            const avg = groupedByDate.length > 0 ? (total / groupedByDate.length).toFixed(1) : 0;
 
-            return { total, avg, days: records.length };
+            return { total, avg, days: groupedByDate.length };
         }
 
         // Display statistics
@@ -479,17 +500,19 @@
                 return;
             }
 
-            const sortedRecords = records.sort((a, b) => new Date(b.date) - new Date(a.date));
+            // Group records by date
+            const groupedByDate = groupRecordsByDate(records);
+            const sortedGroups = groupedByDate.sort((a, b) => new Date(b.date) - new Date(a.date));
             
             recordsContainer.innerHTML = `
                 <ul class="records-list">
-                    ${sortedRecords.map(record => `
+                    ${sortedGroups.map(group => `
                         <li class="record-item">
                             <div class="record-info">
-                                <div class="record-count">${record.count} glasses</div>
-                                <div class="record-date">${formatDate(record.date)}</div>
+                                <div class="record-count">${group.count} glasses</div>
+                                <div class="record-date">${formatDate(group.date)} ${group.records.length > 1 ? `(${group.records.length} entries)` : ''}</div>
                             </div>
-                            <button class="delete-btn" onclick="deleteRecord(${record.id})">Delete</button>
+                            <button class="delete-btn" onclick="deleteRecordsForDate('${group.date}')">Delete</button>
                         </li>
                     `).join('')}
                 </ul>
@@ -521,37 +544,42 @@
             });
         }
 
-        // Delete record
-        async function deleteRecord(id) {
-            if (!confirm('Are you sure you want to delete this record?')) {
+        // Delete all records for a specific date
+        async function deleteRecordsForDate(date) {
+            const recordsToDelete = allRecords.filter(r => r.date === date);
+            
+            if (recordsToDelete.length === 0) return;
+
+            const message = recordsToDelete.length === 1 
+                ? 'Are you sure you want to delete this record?'
+                : `Are you sure you want to delete all ${recordsToDelete.length} records for this date?`;
+
+            if (!confirm(message)) {
                 return;
             }
 
             try {
-                const response = await fetch(API_URL, {
-                    method: 'DELETE',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ id })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showMessage('Record deleted successfully!', 'success');
-                    await loadRecords();
-                } else {
-                    showMessage(data.error || 'Failed to delete record', 'error');
+                // Delete all records for this date
+                for (const record of recordsToDelete) {
+                    await fetch(API_URL, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ id: record.id })
+                    });
                 }
+
+                showMessage('Records deleted successfully!', 'success');
+                await loadRecords();
             } catch (error) {
-                showMessage('Error deleting record. Please try again.', 'error');
+                showMessage('Error deleting records. Please try again.', 'error');
                 console.error('Error:', error);
             }
         }
 
-        // Make deleteRecord available globally
-        window.deleteRecord = deleteRecord;
+        // Make functions available globally
+        window.deleteRecordsForDate = deleteRecordsForDate;
 
         // Handle filter button clicks
         filterButtons.forEach(button => {
